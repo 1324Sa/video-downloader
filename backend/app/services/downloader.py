@@ -1,19 +1,27 @@
 import os
 import re
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 import yt_dlp
 
-# إعداد مجلد التنزيل المؤقت
+# --- تحديد المسارات وثوابت التنزيل ---
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+COOKIES_PATH = BASE_DIR / "cookies.txt"
+
 TEMP_DOWNLOAD_DIR = "temp_downloads"
 os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
 
 
 def extract_video_info(url: str) -> Dict[str, Any]:
-    """استخراج تفاصيل الفيديو مع تنظيم قائمة الجودات المتاحة."""
+    """استخراج تفاصيل الفيديو مع تنظيم قائمة الجودات المتاحة ودعم الكوكيز."""
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
     }
+
+    # إضافة ملف الكوكيز إن وجد لتجاوز حماية يوتيوب
+    if COOKIES_PATH.exists():
+        ydl_opts['cookiefile'] = str(COOKIES_PATH.absolute())
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -62,7 +70,7 @@ def download_media(
     use_ffmpeg: bool = True,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
-    """تنزيل الميديا بالدقة المطلوبة مع دعم متابعة نسبة التنزيل ودمج FFmpeg أو التحميل المباشر."""
+    """تنزيل الميديا بالدقة المطلوبة مع دعم متابعة نسبة التنزيل وتمرير الكوكيز."""
     outtmpl = os.path.join(TEMP_DOWNLOAD_DIR, '%(id)s.%(ext)s')
 
     # خطاف متابعة تقدم التنزيل لتوفير القراءة اللحظية للفرونت إند
@@ -86,6 +94,10 @@ def download_media(
         'overwrites': True,
         'progress_hooks': [progress_hook],
     }
+
+    # ربط ملف الكوكيز لعمليات التحميل أيضاً
+    if COOKIES_PATH.exists():
+        ydl_opts['cookiefile'] = str(COOKIES_PATH.absolute())
 
     if download_type == "audio":
         # تنزيل الصوت فقط وتحويله إلى MP3

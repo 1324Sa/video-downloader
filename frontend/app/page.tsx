@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Video, 
   Download, 
@@ -31,6 +31,9 @@ interface VideoInfoData {
   formats?: VideoFormat[];
 }
 
+// رابط السيرفر الأساسي (يأخذ القيمة من متغيرات البيئة أو يعود للمحلي افتراضياً)
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export default function Home() {
   const [url, setUrl] = useState('');
   const [loadingInfo, setLoadingInfo] = useState(false);
@@ -60,7 +63,7 @@ export default function Home() {
     setIsCompleted(false);
 
     try {
-      const res = await fetch('http://localhost:8000/api/fetch-info', {
+      const res = await fetch(`${API_BASE_URL}/api/fetch-info`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
@@ -81,7 +84,7 @@ export default function Home() {
         setErrorMessage(result.detail || result.error || 'فشلت عملية جلب معلومات الفيديو');
       }
     } catch {
-      setErrorMessage('تعذر الاتصال بالسيرفر، تأكد من تشغيل Uvicorn');
+      setErrorMessage('تعذر الاتصال بالسيرفر، تأكد من تشغيل Uvicorn أو ضبط متغير البيئة');
     } finally {
       setLoadingInfo(false);
     }
@@ -90,7 +93,7 @@ export default function Home() {
   // 2. تتبع نسبة التحميل لحظياً (Polling)
   const pollTaskStatus = async (taskId: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/status/${taskId}`);
+      const res = await fetch(`${API_BASE_URL}/api/status/${taskId}`);
       const data = await res.json();
 
       if (data.status === 'processing' || data.status === 'downloading') {
@@ -103,7 +106,7 @@ export default function Home() {
         setIsCompleted(true);
         const rawPath = data.result?.file_path || data.file_path || data.filename || '';
         const fileName = rawPath.split('\\').pop()?.split('/').pop() || '';
-        setDownloadLink(`http://localhost:8000/api/files/${fileName}`);
+        setDownloadLink(`${API_BASE_URL}/api/files/${fileName}`);
       } else if (data.status === 'failed' || data.status === 'ERROR') {
         setIsDownloading(false);
         setErrorMessage(data.error || 'فشلت عملية التنزيل في السيرفر');
@@ -125,7 +128,7 @@ export default function Home() {
     setErrorMessage('');
 
     try {
-      const res = await fetch('http://localhost:8000/api/download', {
+      const res = await fetch(`${API_BASE_URL}/api/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

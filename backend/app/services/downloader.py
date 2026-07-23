@@ -23,16 +23,17 @@ os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
 
 
 def extract_video_info(url: str) -> Dict[str, Any]:
-    """استخراج تفاصيل الفيديو مع دعم الفيديوهات العادية و الـ Shorts."""
+    """استخراج تفاصيل الفيديو مع دعم مرن للـ Shorts والفيديوهات العادية بدون أخطاء صيغة."""
     
     print(f"=== CHECK COOKIES ===")
     print(f"Path: {COOKIES_PATH.absolute()}")
     print(f"Exists: {COOKIES_PATH.exists()}")
 
+    # استخدام خيارات مرنة جداً تتجاوز قيود الصيغ غير المتاحة
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'best',  # اعتماد أفضل صيغة متاحة تلقائياً لتجنب خطأ الصيغة غير الموجودة
+        'format': 'bv*+ba/b',  # صيغة مرنة للغاية لجلب أفضل فيديو وصوت متاحين
     }
 
     if COOKIES_PATH.exists():
@@ -51,17 +52,16 @@ def extract_video_info(url: str) -> Dict[str, Any]:
 
             for f in formats:
                 height = f.get('height')
-                # السماح بالصيغ التي تحتوي على فيديو (حتى لو كان الصوت منفصلاً أو مدمجاً لتوافق Shorts)
                 if height and height not in seen_heights:
                     seen_heights.add(height)
                     video_formats.append({
-                        "format_id": f.get('format_id'),  # استخدام الـ format_id الفعلي لضمان نجاح التحميل لاحقاً
+                        "format_id": f.get('format_id'),
                         "resolution": f"{height}p",
                         "height": height,
                         "ext": f.get('ext', 'mp4'),
                     })
 
-            # إذا لم يتم العثور على صيغ مفصلة (مثل بعض روابط Shorts)، أضف صيغة افتراضية آمنة
+            # إذا لم يتم العثور على دقات مفصلة (مثل بعض الـ Shorts)، نضع خيار افتراضي آمن
             if not video_formats:
                 video_formats.append({
                     "format_id": "best",
@@ -70,7 +70,6 @@ def extract_video_info(url: str) -> Dict[str, Any]:
                     "ext": "mp4",
                 })
 
-            # ترتيب الدقات من الأعلى للأقل
             video_formats = sorted(
                 video_formats, key=lambda x: x['height'], reverse=True
             )
@@ -85,6 +84,7 @@ def extract_video_info(url: str) -> Dict[str, Any]:
                 },
             }
     except Exception as e:
+        print(f"Extraction Error: {str(e)}")
         return {"success": False, "error": str(e)}
 
 

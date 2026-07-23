@@ -14,6 +14,12 @@ os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
 
 def extract_video_info(url: str) -> Dict[str, Any]:
     """استخراج تفاصيل الفيديو مع تنظيم قائمة الجودات المتاحة ودعم الكوكيز."""
+    
+    # --- فحص مسار ووجود ملف الكوكيز ---
+    print(f"=== CHECK COOKIES ===")
+    print(f"Path: {COOKIES_PATH.absolute()}")
+    print(f"Exists: {COOKIES_PATH.exists()}")
+
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
@@ -22,6 +28,9 @@ def extract_video_info(url: str) -> Dict[str, Any]:
     # إضافة ملف الكوكيز إن وجد لتجاوز حماية يوتيوب
     if COOKIES_PATH.exists():
         ydl_opts['cookiefile'] = str(COOKIES_PATH.absolute())
+        print("-> Cookie file successfully attached to yt_dlp options.")
+    else:
+        print("-> WARNING: Cookie file NOT found on the server path!")
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

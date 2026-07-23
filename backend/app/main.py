@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+# استدعاء الخدمات المباشرة من مشروعك
 from app.services.downloader import download_media, extract_video_info
 
 # --- المسارات والثوابت ---
@@ -16,21 +17,21 @@ DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 # --- إعداد التطبيق ---
 app = FastAPI(
-    title="Social Media Downloader API",
+    title="Video Downloader API",
     description="API لجلب ومعالجة فيديوهات وصوتيات منصات التواصل الاجتماعي",
 )
 
 # --- إعدادات CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # السماح لكل النطاقات ومنها Vercel
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# --- مخططات الطلبات (Request Schemas) ---
+# --- مخططات الطلبات (Schemas) ---
 class VideoRequest(BaseModel):
     url: str
 
@@ -38,16 +39,16 @@ class VideoRequest(BaseModel):
 class DownloadRequest(BaseModel):
     url: str
     download_type: str = "video"  # "video" أو "audio"
-    format_id: Optional[str] = "best"  # دقة الفيديو
-    quality: Optional[str] = "192"  # جودة الصوت (kbps)
-    enhance_mode: Optional[str] = "none"  # تحسين الدقة/المعالجة
+    format_id: Optional[str] = "best"
+    quality: Optional[str] = "192"
+    enhance_mode: Optional[str] = "none"
 
 
 # --- المسارات (Endpoints) ---
 @app.get("/", summary="Health Check")
 def home() -> Dict[str, str]:
     """التحقق من حالة الخادم."""
-    return {"message": "API Server is running successfully!"}
+    return {"status": "ok", "message": "API Server Running"}
 
 
 @app.post("/api/fetch-info", summary="Fetch Video Information")
@@ -64,7 +65,7 @@ async def fetch_info(payload: VideoRequest) -> Dict[str, Any]:
 
 @app.post("/api/download", summary="Direct Media Download")
 def start_download(payload: DownloadRequest) -> Dict[str, Any]:
-    """تنفيذ التحميل مباشرة وتجنب الاعتماد على Celery و Redis."""
+    """تنفيذ التحميل مباشرة دون الاعتماد على Celery أو Redis."""
     try:
         result = download_media(
             url=payload.url,
@@ -84,7 +85,7 @@ def start_download(payload: DownloadRequest) -> Dict[str, Any]:
 
 @app.get("/api/files/{filename}", summary="Download File")
 async def download_file(filename: str) -> FileResponse:
-    """تخديم وتحميل الملف مع طباعة المسار للتأكد عند حدوث أي أخطاء."""
+    """تخديم وتحميل الملف مباشرة لجهاز المستخدم عبر Header التنزيل."""
     file_path = DOWNLOADS_DIR / filename
 
     print(f"--> Searching for file at: {file_path.absolute()}")
@@ -93,11 +94,13 @@ async def download_file(filename: str) -> FileResponse:
         print(f"--> ERROR: File not found at {file_path.absolute()}")
         raise HTTPException(
             status_code=404,
-            detail=f"الملف غير موجود في المسار: {file_path}",
+            detail=f"الملف غير موجود على السيرفر: {filename}",
         )
 
+    # إجبار المتصفح على تنزيل الملف بدلاً من عرضه داخل الصفحة
     return FileResponse(
         path=str(file_path),
         filename=filename,
         media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

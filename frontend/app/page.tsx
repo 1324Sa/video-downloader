@@ -31,7 +31,7 @@ interface VideoInfoData {
   formats?: VideoFormat[];
 }
 
-// رابط السيرفر الأساسي (يأخذ القيمة من متغيرات البيئة أو يعود للمحلي افتراضياً)
+// رابط السيرفر الأساسي
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function Home() {
@@ -48,8 +48,6 @@ export default function Home() {
   // التحكم بالخط والواجهة
   const [selectedFont, setSelectedFont] = useState('var(--font-cairo)');
   const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [statusMessage, setStatusMessage] = useState('');
   const [downloadLink, setDownloadLink] = useState('');
   const [isCompleted, setIsCompleted] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -84,46 +82,15 @@ export default function Home() {
         setErrorMessage(result.detail || result.error || 'فشلت عملية جلب معلومات الفيديو');
       }
     } catch {
-      setErrorMessage('تعذر الاتصال بالسيرفر، تأكد من تشغيل Uvicorn أو ضبط متغير البيئة');
+      setErrorMessage('تعذر الاتصال بالسيرفر، تأكد من تشغيل السيرفر ورابط API');
     } finally {
       setLoadingInfo(false);
     }
   };
 
-  // 2. تتبع نسبة التحميل لحظياً (Polling)
-  const pollTaskStatus = async (taskId: string) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/status/${taskId}`);
-      const data = await res.json();
-
-      if (data.status === 'processing' || data.status === 'downloading') {
-        setDownloadProgress(data.progress || 0);
-        setStatusMessage(data.message || 'جاري التحميل والمعالجة...');
-        setTimeout(() => pollTaskStatus(taskId), 1000);
-      } else if (data.status === 'completed' || data.status === 'SUCCESS') {
-        setDownloadProgress(100);
-        setIsDownloading(false);
-        setIsCompleted(true);
-        const rawPath = data.result?.file_path || data.file_path || data.filename || '';
-        const fileName = rawPath.split('\\').pop()?.split('/').pop() || '';
-        setDownloadLink(`${API_BASE_URL}/api/files/${fileName}`);
-      } else if (data.status === 'failed' || data.status === 'ERROR') {
-        setIsDownloading(false);
-        setErrorMessage(data.error || 'فشلت عملية التنزيل في السيرفر');
-      } else {
-        setTimeout(() => pollTaskStatus(taskId), 1000);
-      }
-    } catch {
-      setIsDownloading(false);
-      setErrorMessage('حدث خطأ أثناء تتبع حالة التحميل');
-    }
-  };
-
-  // 3. إرسال طلب التنزيل (مع التحقق الآمن لصيغ Shorts والفيديوهات)
+  // 2. إرسال طلب التنزيل المباشر
   const handleStartDownload = async () => {
     setIsDownloading(true);
-    setDownloadProgress(0);
-    setStatusMessage('جاري بدء التحميل...');
     setIsCompleted(false);
     setErrorMessage('');
 
@@ -143,17 +110,32 @@ export default function Home() {
           enhance_mode: enhanceMode
         })
       });
-      const data = await res.json();
+      
+      const resData = await res.json();
 
-      if (res.ok && data.task_id) {
-        pollTaskStatus(data.task_id);
+      if (res.ok && resData.success && resData.data?.file_path) {
+        // استخراج اسم الملف المباشر
+        const rawPath = resData.data.file_path;
+        const fileName = rawPath.split('\\').pop()?.split('/').pop() || rawPath;
+        const finalDownloadUrl = `${API_BASE_URL}/api/files/${fileName}`;
+
+        setDownloadLink(finalDownloadUrl);
+        setIsCompleted(true);
+
+        // تنزيل تلقائي فوري للملف على جهاز المستخدم
+        const link = document.createElement('a');
+        link.href = finalDownloadUrl;
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
       } else {
-        setIsDownloading(false);
-        setErrorMessage(data.detail || 'تعذر بدء المهمة في السيرفر');
+        setErrorMessage(resData.detail || 'تعذر معالجة وتنزيل الملف');
       }
     } catch {
+      setErrorMessage('فشل الاتصال بالسيرفر أثناء عملية التنزيل');
+    } finally {
       setIsDownloading(false);
-      setErrorMessage('فشل الاتصال بالسيرفر لبدء التحميل');
     }
   };
 
@@ -338,7 +320,7 @@ export default function Home() {
               {isDownloading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  جاري التحميل والمعالجة...
+                  جاري التحميل والتجهيز...
                 </>
               ) : (
                 <>
@@ -348,25 +330,6 @@ export default function Home() {
               )}
             </button>
 
-            {/* شريط التقدم */}
-            {isDownloading && (
-              <div className="bg-[#0d111d] border border-slate-800/80 p-3.5 rounded-xl space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-indigo-400 font-medium flex items-center gap-1.5">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    {statusMessage || 'جاري التحميل...'}
-                  </span>
-                  <span className="text-[#05a863] font-bold">{downloadProgress}%</span>
-                </div>
-                <div className="w-full bg-[#171e31] h-2 rounded-full overflow-hidden p-0.5 border border-slate-800">
-                  <div
-                    className="bg-[#05a863] h-full rounded-full transition-all duration-300"
-                    style={{ width: `${downloadProgress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
           </div>
         )}
 
@@ -375,13 +338,13 @@ export default function Home() {
       {/* كارت اكتمال التحميل */}
       {isCompleted && (
         <div className="w-full max-w-xl bg-[#0f2128] border border-emerald-500/30 p-6 rounded-2xl text-center space-y-4 shadow-2xl">
-          <p className="text-slate-300 text-xs font-semibold">اكتمل التجهيز بنجاح!</p>
+          <p className="text-slate-300 text-xs font-semibold">اكتمل التجهيز وتم بدء التنزيل بنجاح!</p>
           
           <div className="w-10 h-10 rounded-full border-2 border-[#05a863] bg-[#05a863]/10 flex items-center justify-center mx-auto text-[#05a863]">
             <CheckCircle2 className="w-6 h-6" />
           </div>
 
-          <p className="text-[#05a863] text-xs font-bold">الملف جاهز للتنزيل!</p>
+          <p className="text-[#05a863] text-xs font-bold">الملف جاهز! إذا لم يبدأ التنزيل تلقائياً اضغط الزر أدناه:</p>
 
           <a
             href={downloadLink}
@@ -389,7 +352,7 @@ export default function Home() {
             className="inline-flex items-center gap-2 bg-[#05a863] hover:bg-[#049356] text-white text-xs font-bold px-6 py-2.5 rounded-xl transition-all shadow-lg"
           >
             <Download className="w-4 h-4" />
-            حفظ الملف على جهازك
+            تحميل الملف مباشرة
           </a>
         </div>
       )}

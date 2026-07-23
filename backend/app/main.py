@@ -12,7 +12,7 @@ app = FastAPI()
 # إعدادات CORS للسماح للـ Frontend بالتواصل مع الـ Backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,12 +23,14 @@ DOWNLOAD_FOLDER = "temp_downloads"
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
+
 # ==================================================================
 # 1. المسار الأساسي للفحص (Check)
 # ==================================================================
 @app.get("/")
 def home():
     return {"message": "Social Media Video Downloader API is running"}
+
 
 # ==================================================================
 # 2. مسار معلومات الفيديو
@@ -40,11 +42,11 @@ def get_video_info(url: str = Query(..., description="رابط الفيديو"))
         'no_warnings': True,
         'skip_download': True,
     }
-    
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            
+
             formats = []
             if 'formats' in info:
                 for f in info['formats']:
@@ -53,7 +55,7 @@ def get_video_info(url: str = Query(..., description="رابط الفيديو"))
                         res = f.get('format_note') or f.get('resolution') or f"{f.get('height', 'SD')}p"
                         ext = f.get('ext', 'mp4')
                         is_audio = f.get('vcodec') == 'none'
-                        
+
                         formats.append({
                             'format_id': f.get('format_id'),
                             'quality': f"🎵 صوت فقط (MP3/M4A)" if is_audio else f"🎬 {res} ({ext})",
@@ -61,7 +63,7 @@ def get_video_info(url: str = Query(..., description="رابط الفيديو"))
                             'ext': ext,
                             'type': 'audio' if is_audio else 'video'
                         })
-            
+
             # إزالة التكرار
             unique_formats = list({f['quality']: f for f in formats}.values())
 
@@ -72,9 +74,10 @@ def get_video_info(url: str = Query(..., description="رابط الفيديو"))
                 "uploader": info.get('uploader'),
                 "formats": unique_formats
             }
-            
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"تعذر جلب معلومات الفيديو: {str(e)}")
+
 
 # ==================================================================
 # 3. نموذج البيانات لمسار التحميل (Download)
@@ -85,18 +88,42 @@ class DownloadRequest(BaseModel):
     audio_only: bool = False
     filter_type: str = "none"
 
+
 # ==================================================================
-# 4. مسار التحميل (مع دعم الكوكيز وتنظيف السيرفر)
+# 4. دالة لحذف الملفات القديمة بعد التحميل لتنظيف السيرفر
+# ==================================================================
+def delete_file_after_delay(file_path, delay=60):
+    """حذف الملف بعد مدة زمنية محددة لتوفير مساحة السيرفر"""
+    def delete():
+        time.sleep(delay)
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                print(f"🧹 تم حذف الملف المؤقت: {file_path}")
+            except Exception:
+                pass  # تجاهل الأخطاء إذا كان الملف قيد الاستخدام
+
+    threading.Thread(target=delete).start()
+
+
+# ==================================================================
+# 5. مسار التحميل (مع دعم الكوكيز وتنظيف السيرفر)
 # ==================================================================
 @app.post("/api/download")
 async def download_video(request: DownloadRequest):
+    # --- تعديل الرابط لمساعدة yt-dlp ---
+    url_to_download = request.url
+    if "x.com" in url_to_download:
+        url_to_download = url_to_download.replace("x.com", "twitter.com")
+    # ----------------------------------
+
     try:
         # تحضير خيارات yt-dlp بناءً على طلب المستخدم
         ydl_opts = {
             'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
-            'cookiefile': 'x_com_cookies.txt',  # <--- تم التعديل هنا لاستخدام ملف الكوكيز
+            'cookiefile': 'x_com_cookies.txt',  # استخدام ملف الكوكيز
         }
 
         # 1. اختيار الجودة
@@ -125,9 +152,9 @@ async def download_video(request: DownloadRequest):
         if request.filter_type != 'none' and not request.audio_only:
             pass
 
-        # تنفيذ التحميل
+        # تنفيذ التحميل (استخدم url_to_download بدلاً من request.url)
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(request.url, download=True)
+            info = ydl.extract_info(url_to_download, download=True)
             filename = ydl.prepare_filename(info)
 
             # تعديل اسم الملف إذا كان صوتاً (لأنه سيصبح mp3 بدلاً من m4a/webm)
@@ -140,8 +167,8 @@ async def download_video(request: DownloadRequest):
 
         # إعادة الملف للمستخدم
         response = FileResponse(
-            path=filename, 
-            media_type='video/mp4' if not request.audio_only else 'audio/mpeg', 
+            path=filename,
+            media_type='video/mp4' if not request.audio_only else 'audio/mpeg',
             filename=os.path.basename(filename)
         )
 
@@ -153,18 +180,3 @@ async def download_video(request: DownloadRequest):
     except Exception as e:
         # تنظيف الملفات في حال حدوث خطأ
         raise HTTPException(status_code=400, detail=f"حدث خطأ أثناء التحميل: {str(e)}")
-
-# ==================================================================
-# 5. دالة لحذف الملفات القديمة بعد التحميل لتنظيف السيرفر
-# ==================================================================
-def delete_file_after_delay(file_path, delay=60):
-    """حذف الملف بعد مدة زمنية محددة لتوفير مساحة السيرفر"""
-    def delete():
-        time.sleep(delay)
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-                print(f"🧹 تم حذف الملف المؤقت: {file_path}")
-            except Exception:
-                pass # تجاهل الأخطاء إذا كان الملف قيد الاستخدام
-    threading.Thread(target=delete).start()

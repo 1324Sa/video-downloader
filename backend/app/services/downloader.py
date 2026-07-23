@@ -4,10 +4,19 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 import yt_dlp
 
-# --- تحديد المسارات وثوابت التنزيل ---
-# بناءً على مكان ملف downloader.py الحالي داخل (app/services)، نصعد 3 مستويات للوصول لمجلد backend أو المجلد الرئيسي
+# --- تحديد المسارات وثوابت التنزيل ودعم الـ Environment Variables ---
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 COOKIES_PATH = BASE_DIR / "cookies.txt"
+
+# إذا كان متغير البيئة موجوداً في Render، قم بإنشاء ملف cookies.txt تلقائياً من محتواه
+youtube_cookies_env = os.getenv("YOUTUBE_COOKIES")
+if youtube_cookies_env:
+    try:
+        with open(COOKIES_PATH, "w", encoding="utf-8") as f:
+            f.write(youtube_cookies_env)
+        print("-> Successfully generated cookies.txt from environment variable.")
+    except Exception as e:
+        print(f"-> Error writing cookies.txt from env: {e}")
 
 TEMP_DOWNLOAD_DIR = "temp_downloads"
 os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)

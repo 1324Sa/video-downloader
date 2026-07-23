@@ -23,7 +23,7 @@ os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
 
 
 def extract_video_info(url: str) -> Dict[str, Any]:
-    """استخراج تفاصيل الفيديو بأبسط خيارات ممكنة لتجنب أي قيود صيغة."""
+    """استخراج تفاصيل الفيديو أو الشورتس مع تجاوز القيود وصيغ يوتيوب."""
     
     print(f"=== CHECK COOKIES ===")
     print(f"Path: {COOKIES_PATH.absolute()}")
@@ -33,6 +33,7 @@ def extract_video_info(url: str) -> Dict[str, Any]:
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
+        'format': 'best/all',  # السماح بقراءة كافة الصيغ المتاحة للشورٹس والفيديوهات
     }
 
     if COOKIES_PATH.exists():
@@ -95,7 +96,6 @@ def download_media(
     """تنزيل الميديا بالدقة المطلوبة مع دعم متابعة نسبة التنزيل وتمرير الكوكيز."""
     outtmpl = os.path.join(TEMP_DOWNLOAD_DIR, '%(id)s.%(ext)s')
 
-    # خطاف متابعة تقدم التنزيل لتوفير القراءة اللحظية للفرونت إند
     def progress_hook(d: Dict[str, Any]) -> None:
         if d.get('status') == 'downloading' and progress_callback:
             total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
@@ -117,12 +117,10 @@ def download_media(
         'progress_hooks': [progress_hook],
     }
 
-    # ربط ملف الكوكيز لعمليات التحميل أيضاً
     if COOKIES_PATH.exists():
         ydl_opts['cookiefile'] = str(COOKIES_PATH.absolute())
 
     if download_type == "audio":
-        # تنزيل الصوت فقط وتحويله إلى MP3
         ydl_opts['format'] = 'bestaudio/best'
         if use_ffmpeg:
             ydl_opts['postprocessors'] = [{
@@ -131,7 +129,6 @@ def download_media(
                 'preferredquality': quality if quality in ["320", "192", "128"] else "192",
             }]
     else:
-        # تنزيل الفيديو والدقة المختارة
         height_match = re.search(r'\d+', str(format_id)) if format_id else None
 
         if use_ffmpeg:
@@ -147,7 +144,6 @@ def download_media(
 
             ydl_opts['merge_output_format'] = 'mp4'
         else:
-            # تنزيل مباشر لملف فيديو محتوي على صوت مسبقاً (بدون الحاجة لـ FFmpeg)
             if height_match:
                 target_height = height_match.group()
                 ydl_opts['format'] = f"b[height<={target_height}]/best[ext=mp4]/best"
@@ -159,7 +155,6 @@ def download_media(
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
 
-            # معالجة امتداد الملف الناتج بعد التنزيل
             if download_type == "audio" and use_ffmpeg:
                 filename = os.path.splitext(filename)[0] + ".mp3"
             elif download_type == "video" and not filename.endswith('.mp4'):

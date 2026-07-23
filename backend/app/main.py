@@ -123,7 +123,7 @@ async def download_video(request: DownloadRequest):
             'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
-            'cookiefile': 'x_com_cookies.txt',  # استخدام ملف الكوكيز
+            'cookiefile': 'x_cookies',  # <--- تم التعديل هنا
         }
 
         # 1. اختيار الجودة

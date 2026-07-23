@@ -9,6 +9,10 @@ import yt_dlp
 
 app = FastAPI()
 
+# ==================================================================
+# 0. الإعدادات الأساسية و CORS
+# ==================================================================
+
 # إعدادات CORS للسماح للـ Frontend بالتواصل مع الـ Backend
 app.add_middleware(
     CORSMiddleware,
@@ -20,7 +24,17 @@ app.add_middleware(
 
 # مجلد مؤقت لتنزيل الملفات
 DOWNLOAD_FOLDER = "temp_downloads"
-if not os.path.exists(DOWNLOAD_FOLDER):
+
+# تنظيف مجلد التحميلات المؤقتة عند بدء تشغيل السيرفر (لمنع امتلاء القرص)
+if os.path.exists(DOWNLOAD_FOLDER):
+    for file in os.listdir(DOWNLOAD_FOLDER):
+        file_path = os.path.join(DOWNLOAD_FOLDER, file)
+        try:
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+        except Exception:
+            pass
+else:
     os.makedirs(DOWNLOAD_FOLDER)
 
 
@@ -90,7 +104,7 @@ class DownloadRequest(BaseModel):
 
 
 # ==================================================================
-# 4. دالة لحذف الملفات القديمة بعد التحميل لتنظيف السيرفر
+# 4. دالة لحذف الملفات القديمة بعد التحميل (لتنظيف السيرفر)
 # ==================================================================
 def delete_file_after_delay(file_path, delay=60):
     """حذف الملف بعد مدة زمنية محددة لتوفير مساحة السيرفر"""
@@ -111,7 +125,7 @@ def delete_file_after_delay(file_path, delay=60):
 # ==================================================================
 @app.post("/api/download")
 async def download_video(request: DownloadRequest):
-    # --- تعديل الرابط لمساعدة yt-dlp ---
+    # --- معالجة الرابط لمساعدة yt-dlp ---
     url_to_download = request.url
     if "x.com" in url_to_download:
         url_to_download = url_to_download.replace("x.com", "twitter.com")
@@ -123,7 +137,7 @@ async def download_video(request: DownloadRequest):
             'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
-            'cookiefile': 'x_cookies',  # <--- تم التعديل هنا
+            'cookiefile': 'x_cookies',  # ملف الكوكيز الخاص بـ X (تويتر)
         }
 
         # 1. اختيار الجودة
@@ -148,11 +162,10 @@ async def download_video(request: DownloadRequest):
             }]
 
         # 3. الفلاتر (تطبيق بسيط، يمكنك التوسع فيه لاحقاً)
-        # ملاحظة: تطبيق الفلاتر يتطلب ffmpeg-python وتعديلاً معقداً
         if request.filter_type != 'none' and not request.audio_only:
-            pass
+            pass  # مكان لإضافة كود الفلاتر مستقبلاً
 
-        # تنفيذ التحميل (استخدم url_to_download بدلاً من request.url)
+        # تنفيذ التحميل
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url_to_download, download=True)
             filename = ydl.prepare_filename(info)
@@ -172,11 +185,10 @@ async def download_video(request: DownloadRequest):
             filename=os.path.basename(filename)
         )
 
-        # تشغيل دالة لحذف الملف بعد 60 ثانية من إرساله للمستخدم (لتنظيف السيرفر)
+        # حذف الملف بعد 60 ثانية من إرساله للمستخدم
         delete_file_after_delay(filename, delay=60)
 
         return response
 
     except Exception as e:
-        # تنظيف الملفات في حال حدوث خطأ
         raise HTTPException(status_code=400, detail=f"حدث خطأ أثناء التحميل: {str(e)}")

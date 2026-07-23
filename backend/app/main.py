@@ -1,5 +1,6 @@
 import os
-import shutil
+import threading
+import time
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -11,7 +12,7 @@ app = FastAPI()
 # إعدادات CORS للسماح للـ Frontend بالتواصل مع الـ Backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # يمكنك تحديد النطاق الخاص بـ Vercel هنا لمزيد من الأمان
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -22,16 +23,16 @@ DOWNLOAD_FOLDER = "temp_downloads"
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
-# ------------------------------------------------------------------
+# ==================================================================
 # 1. المسار الأساسي للفحص (Check)
-# ------------------------------------------------------------------
+# ==================================================================
 @app.get("/")
 def home():
     return {"message": "Social Media Video Downloader API is running"}
 
-# ------------------------------------------------------------------
-# 2. مسار معلومات الفيديو (الذي أرسلته)
-# ------------------------------------------------------------------
+# ==================================================================
+# 2. مسار معلومات الفيديو
+# ==================================================================
 @app.get("/api/info")
 def get_video_info(url: str = Query(..., description="رابط الفيديو")):
     ydl_opts = {
@@ -75,18 +76,18 @@ def get_video_info(url: str = Query(..., description="رابط الفيديو"))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"تعذر جلب معلومات الفيديو: {str(e)}")
 
-# ------------------------------------------------------------------
+# ==================================================================
 # 3. نموذج البيانات لمسار التحميل (Download)
-# ------------------------------------------------------------------
+# ==================================================================
 class DownloadRequest(BaseModel):
     url: str
     quality: str = "best"
     audio_only: bool = False
     filter_type: str = "none"
 
-# ------------------------------------------------------------------
-# 4. مسار التحميل (الذي طلبته في الواجهة الجديدة)
-# ------------------------------------------------------------------
+# ==================================================================
+# 4. مسار التحميل (مع دعم الكوكيز وتنظيف السيرفر)
+# ==================================================================
 @app.post("/api/download")
 async def download_video(request: DownloadRequest):
     try:
@@ -95,6 +96,7 @@ async def download_video(request: DownloadRequest):
             'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
+            'cookiefile': 'x_com_cookies.txt',  # <--- تم التعديل هنا لاستخدام ملف الكوكيز
         }
 
         # 1. اختيار الجودة
@@ -120,13 +122,7 @@ async def download_video(request: DownloadRequest):
 
         # 3. الفلاتر (تطبيق بسيط، يمكنك التوسع فيه لاحقاً)
         # ملاحظة: تطبيق الفلاتر يتطلب ffmpeg-python وتعديلاً معقداً
-        # إذا اخترت فلتر، سنقوم بتحميله ثم معالجته (احتياطي)
-        postprocessors = []
-        
         if request.filter_type != 'none' and not request.audio_only:
-            # مثال على فلتر التضبيش (Blur) أو تدرج الرمادي
-            # يجب كتابة كود ffmpeg هنا لمعالجة الفيديو بعد تحميله
-            # نضع هذا الكود كمثال مستقبلي، حالياً سنقوم بالتحميل العادي
             pass
 
         # تنفيذ التحميل
@@ -142,27 +138,33 @@ async def download_video(request: DownloadRequest):
         if not os.path.exists(filename):
             raise HTTPException(status_code=500, detail="فشل في إنشاء ملف التحميل.")
 
-        # إعادة الملف للمستخدم (يمكنك إضافة حذف الملف بعد الإرسال لاحقاً)
-        return FileResponse(
+        # إعادة الملف للمستخدم
+        response = FileResponse(
             path=filename, 
             media_type='video/mp4' if not request.audio_only else 'audio/mpeg', 
             filename=os.path.basename(filename)
         )
 
+        # تشغيل دالة لحذف الملف بعد 60 ثانية من إرساله للمستخدم (لتنظيف السيرفر)
+        delete_file_after_delay(filename, delay=60)
+
+        return response
+
     except Exception as e:
         # تنظيف الملفات في حال حدوث خطأ
         raise HTTPException(status_code=400, detail=f"حدث خطأ أثناء التحميل: {str(e)}")
 
-# ------------------------------------------------------------------
-# 5. (اختياري) دالة لحذف الملفات القديمة بعد التحميل لتنظيف السيرفر
-# ------------------------------------------------------------------
-import threading
-import time
-
+# ==================================================================
+# 5. دالة لحذف الملفات القديمة بعد التحميل لتنظيف السيرفر
+# ==================================================================
 def delete_file_after_delay(file_path, delay=60):
     """حذف الملف بعد مدة زمنية محددة لتوفير مساحة السيرفر"""
     def delete():
         time.sleep(delay)
         if os.path.exists(file_path):
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+                print(f"🧹 تم حذف الملف المؤقت: {file_path}")
+            except Exception:
+                pass # تجاهل الأخطاء إذا كان الملف قيد الاستخدام
     threading.Thread(target=delete).start()

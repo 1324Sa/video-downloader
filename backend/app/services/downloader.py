@@ -23,9 +23,8 @@ os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
 
 
 def extract_video_info(url: str) -> Dict[str, Any]:
-    """استخراج تفاصيل الفيديو مع تنظيم قائمة الجودات المتاحة ودعم الكوكيز."""
+    """استخراج تفاصيل الفيديو مع دعم الفيديوهات العادية و الـ Shorts."""
     
-    # --- فحص مسار ووجود ملف الكوكيز ---
     print(f"=== CHECK COOKIES ===")
     print(f"Path: {COOKIES_PATH.absolute()}")
     print(f"Exists: {COOKIES_PATH.exists()}")
@@ -35,7 +34,6 @@ def extract_video_info(url: str) -> Dict[str, Any]:
         'no_warnings': True,
     }
 
-    # إضافة ملف الكوكيز إن وجد لتجاوز حماية يوتيوب
     if COOKIES_PATH.exists():
         ydl_opts['cookiefile'] = str(COOKIES_PATH.absolute())
         print("-> Cookie file successfully attached to yt_dlp options.")
@@ -52,15 +50,24 @@ def extract_video_info(url: str) -> Dict[str, Any]:
 
             for f in formats:
                 height = f.get('height')
-                # تجميع الدقات الفريدة الصالحة التي تحتوي على بث فيديو
-                if height and height not in seen_heights and f.get('vcodec') != 'none':
+                # السماح بالصيغ التي تحتوي على فيديو (حتى لو كان الصوت منفصلاً أو مدمجاً لتوافق Shorts)
+                if height and height not in seen_heights:
                     seen_heights.add(height)
                     video_formats.append({
-                        "format_id": str(height),  # رقم الدقة مثل 1080 أو 720
+                        "format_id": f.get('format_id'),  # استخدام الـ format_id الفعلي لضمان نجاح التحميل لاحقاً
                         "resolution": f"{height}p",
                         "height": height,
-                        "ext": "mp4",
+                        "ext": f.get('ext', 'mp4'),
                     })
+
+            # إذا لم يتم العثور على صيغ مفصلة (مثل بعض روابط Shorts)، أضف صيغة افتراضية آمنة
+            if not video_formats:
+                video_formats.append({
+                    "format_id": "best",
+                    "resolution": "Best Quality",
+                    "height": 1080,
+                    "ext": "mp4",
+                })
 
             # ترتيب الدقات من الأعلى للأقل
             video_formats = sorted(

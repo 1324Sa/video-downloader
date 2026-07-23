@@ -129,27 +129,12 @@ def download_media(
                 'preferredquality': quality if quality in ["320", "192", "128"] else "192",
             }]
     else:
-        height_match = re.search(r'\d+', str(format_id)) if format_id else None
-
+        # استخدام الصيغة المرنة الآمنة للجميع لتجنب خطأ صيغ الشورتس والفيديوهات غير المتاحة
         if use_ffmpeg:
-            if height_match:
-                target_height = height_match.group()
-                ydl_opts['format'] = (
-                    f"bestvideo[height<={target_height}]+bestaudio/best[height<={target_height}]/best"
-                )
-            elif format_id and format_id != "best":
-                ydl_opts['format'] = f"{format_id}+bestaudio/best"
-            else:
-                # صيغة ذكية وآمنة تدعم الفيديوهات والشورٹس وتتجنب خطأ الصيغة غير المتاحة
-                ydl_opts['format'] = 'bv*+ba/b'
-
+            ydl_opts['format'] = 'bv*+ba/b'
             ydl_opts['merge_output_format'] = 'mp4'
         else:
-            if height_match:
-                target_height = height_match.group()
-                ydl_opts['format'] = f"b[height<={target_height}]/best[ext=mp4]/best"
-            else:
-                ydl_opts['format'] = 'b/best'
+            ydl_opts['format'] = 'b/best'
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

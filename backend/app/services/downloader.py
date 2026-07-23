@@ -32,6 +32,7 @@ def extract_video_info(url: str) -> Dict[str, Any]:
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
+        'format': 'best',  # اعتماد أفضل صيغة متاحة تلقائياً لتجنب خطأ الصيغة غير الموجودة
     }
 
     if COOKIES_PATH.exists():
@@ -179,4 +180,3 @@ def download_media(
     except Exception as e:
         print(f"Download Error Details: {str(e)}")
         raise Exception(f"فشل التحميل: {str(e)}")
-    # update timestamp 2026).

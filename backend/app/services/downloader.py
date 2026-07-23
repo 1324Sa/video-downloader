@@ -24,39 +24,39 @@ os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
 
 def extract_video_info(url: str) -> Dict[str, Any]:
     """استخراج تفاصيل الفيديو أو الشورتس مع تجاوز القيود وصيغ يوتيوب."""
-    
+
     ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': False,
-        'format': 'bestvideo+bestaudio/best',  # قراءة أفضل الصيغ المتاحة للشورٹس والفيديوهات
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web']  # لتجاوز حظر يوتيوب وجلب معلومات الشورتس
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": False,
+        "format": "bestvideo+bestaudio/best",
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"],
             }
-        }
+        },
     }
 
     if COOKIES_PATH.exists():
-        ydl_opts['cookiefile'] = str(COOKIES_PATH.absolute())
+        ydl_opts["cookiefile"] = str(COOKIES_PATH.absolute())
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
-            formats = info.get('formats', [])
+            formats = info.get("formats", [])
             seen_heights = set()
             video_formats = []
 
             for f in formats:
-                height = f.get('height')
+                height = f.get("height")
                 if height and height not in seen_heights:
                     seen_heights.add(height)
                     video_formats.append({
-                        "format_id": str(height),  # استخدام الارتفاع كمعرف للدقة
+                        "format_id": str(height),
                         "resolution": f"{height}p",
                         "height": height,
-                        "ext": f.get('ext', 'mp4'),
+                        "ext": f.get("ext", "mp4"),
                     })
 
             if not video_formats:
@@ -68,15 +68,15 @@ def extract_video_info(url: str) -> Dict[str, Any]:
                 })
 
             video_formats = sorted(
-                video_formats, key=lambda x: x['height'], reverse=True
+                video_formats, key=lambda x: x["height"], reverse=True
             )
 
             return {
                 "success": True,
                 "data": {
-                    "title": info.get('title', 'فيديو بدون عنوان'),
-                    "thumbnail": info.get('thumbnail'),
-                    "extractor": info.get('extractor_key', 'Unknown'),
+                    "title": info.get("title", "فيديو بدون عنوان"),
+                    "thumbnail": info.get("thumbnail"),
+                    "extractor": info.get("extractor_key", "Unknown"),
                     "video_formats": video_formats,
                 },
             }
@@ -94,56 +94,64 @@ def download_media(
     use_ffmpeg: bool = True,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
-    """تنزيل الميديا بالدقة المطلوبة مع دعم Shorts وتفادي الأخطاء."""
-    outtmpl = os.path.join(TEMP_DOWNLOAD_DIR, '%(id)s.%(ext)s')
+    """تنزيل الميديا بالدقة المطلوبة مع معالجة حماية الدقة للشورتس."""
+    outtmpl = os.path.join(TEMP_DOWNLOAD_DIR, "%(id)s.%(ext)s")
 
     def progress_hook(d: Dict[str, Any]) -> None:
-        if d.get('status') == 'downloading' and progress_callback:
-            total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
-            downloaded = d.get('downloaded_bytes', 0)
+        if d.get("status") == "downloading" and progress_callback:
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            downloaded = d.get("downloaded_bytes", 0)
             percentage = round((downloaded / total) * 100, 1) if total > 0 else 0
 
             progress_callback({
-                'progress': percentage,
-                'speed': d.get('speed', 0),
-                'eta': d.get('eta', 0),
-                'status': 'downloading',
+                "progress": percentage,
+                "speed": d.get("speed", 0),
+                "eta": d.get("eta", 0),
+                "status": "downloading",
             })
 
-    # بناء خيار الصيغة بمرونة عالية للشورٹس والفيديوهات العادية
+    # معالجة مرنة للصيغ لمنع خطأ Requested format is not available
     if download_type == "audio":
-        format_option = 'bestaudio/best'
+        format_option = "bestaudio/best"
     else:
-        if format_id and format_id not in ['best', 'undefined', 'null']:
-            format_option = f'bestvideo[height<={format_id}]+bestaudio/best[height<={format_id}]/best'
+        # فحص إذا كانت الدقة محددة برقم أو نص غير best
+        clean_format = str(format_id).strip()
+        if clean_format and clean_format not in ["best", "undefined", "null", "None"]:
+            # البحث عن صيغة بحد أقصى للارتفاع وفي حال التعثر الانتقال تلقائياً لأفضل المتاح
+            format_option = (
+                f"bestvideo[height<={clean_format}]+bestaudio/"
+                f"bestvideo[height<={clean_format}]/best[height<={clean_format}]/best"
+            )
         else:
-            format_option = 'bestvideo+bestaudio/best'
+            format_option = "bestvideo+bestaudio/best"
 
     ydl_opts: Dict[str, Any] = {
-        'outtmpl': outtmpl,
-        'format': format_option,
-        'quiet': True,
-        'no_warnings': True,
-        'overwrites': True,
-        'progress_hooks': [progress_hook],
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web']
+        "outtmpl": outtmpl,
+        "format": format_option,
+        "quiet": True,
+        "no_warnings": True,
+        "overwrites": True,
+        "progress_hooks": [progress_hook],
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"],
             }
-        }
+        },
     }
 
     if COOKIES_PATH.exists():
-        ydl_opts['cookiefile'] = str(COOKIES_PATH.absolute())
+        ydl_opts["cookiefile"] = str(COOKIES_PATH.absolute())
 
     if download_type == "audio" and use_ffmpeg:
-        ydl_opts['postprocessors'] = [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': quality if quality in ["320", "192", "128"] else "192",
+        ydl_opts["postprocessors"] = [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": (
+                quality if quality in ["320", "192", "128"] else "192"
+            ),
         }]
     elif download_type == "video" and use_ffmpeg:
-        ydl_opts['merge_output_format'] = 'mp4'
+        ydl_opts["merge_output_format"] = "mp4"
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -152,15 +160,15 @@ def download_media(
 
             if download_type == "audio" and use_ffmpeg:
                 filename = os.path.splitext(filename)[0] + ".mp3"
-            elif download_type == "video" and not filename.endswith('.mp4'):
+            elif download_type == "video" and not filename.endswith(".mp4"):
                 base = os.path.splitext(filename)[0]
-                if os.path.exists(base + '.mp4'):
-                    filename = base + '.mp4'
+                if os.path.exists(base + ".mp4"):
+                    filename = base + ".mp4"
 
             return {
                 "status": "completed",
                 "file_path": filename,
-                "title": info.get('title', 'Media File'),
+                "title": info.get("title", "Media File"),
             }
     except Exception as e:
         print(f"Download Error Details: {str(e)}")

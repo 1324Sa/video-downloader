@@ -119,13 +119,17 @@ export default function Home() {
     }
   };
 
-  // 3. إرسال طلب التنزيل
+  // 3. إرسال طلب التنزيل (مع التحقق الآمن لصيغ Shorts والفيديوهات)
   const handleStartDownload = async () => {
     setIsDownloading(true);
     setDownloadProgress(0);
     setStatusMessage('جاري بدء التحميل...');
     setIsCompleted(false);
     setErrorMessage('');
+
+    const safeFormatId = (!selectedFormat || selectedFormat === 'undefined' || selectedFormat === 'null') 
+      ? 'best' 
+      : selectedFormat;
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/download`, {
@@ -134,7 +138,7 @@ export default function Home() {
         body: JSON.stringify({
           url,
           download_type: downloadType,
-          format_id: selectedFormat,
+          format_id: safeFormatId,
           quality: selectedQuality,
           enhance_mode: enhanceMode
         })

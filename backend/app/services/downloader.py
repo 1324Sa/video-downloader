@@ -23,23 +23,20 @@ os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
 
 
 def extract_video_info(url: str) -> Dict[str, Any]:
-    """استخراج تفاصيل الفيديو بدون فرض أي صيغة مسبقة لتجنب أخطاء الـ Shorts."""
+    """استخراج تفاصيل الفيديو بأبسط خيارات ممكنة لتجنب أي قيود صيغة."""
     
     print(f"=== CHECK COOKIES ===")
     print(f"Path: {COOKIES_PATH.absolute()}")
     print(f"Exists: {COOKIES_PATH.exists()}")
 
-    # إزالة مفتاح 'format' تماماً من خيارات الاستخراج لكي يقرأ يوتيوب ورابط الـ Short بحرية تامة
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
+        'extract_flat': False,
     }
 
     if COOKIES_PATH.exists():
         ydl_opts['cookiefile'] = str(COOKIES_PATH.absolute())
-        print("-> Cookie file successfully attached to yt_dlp options.")
-    else:
-        print("-> WARNING: Cookie file NOT found on the server path!")
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -60,7 +57,6 @@ def extract_video_info(url: str) -> Dict[str, Any]:
                         "ext": f.get('ext', 'mp4'),
                     })
 
-            # إذا لم يتم العثور على دقات مفصلة، نضع خيار افتراضي آمن
             if not video_formats:
                 video_formats.append({
                     "format_id": "best",

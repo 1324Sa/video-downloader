@@ -13,7 +13,6 @@ interface Format {
 interface VideoInfo {
   title: string;
   thumbnail: string;
-  duration: number;
   uploader: string;
   formats: Format[];
 }
@@ -37,32 +36,31 @@ export default function Home() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/info?url=${encodeURIComponent(url)}`);
       if (!res.ok) {
-        throw new Error('تعذر معالجة الرابط، تأكد من صحته.');
+        throw new Error('تعذر معالجة الرابط، تأكد من صحته ومن دعم المنصة.');
       }
       const data = await res.json();
       setVideoInfo(data);
     } catch (err: any) {
-      setError(err.message || 'حدث خطأ أثناء جلب البيانات.');
+      setError(err.message || 'حدث خطأ أثناء الاتصال بالسيرفر.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4 dir-rtl">
+    <main className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4" dir="rtl">
       <div className="max-w-2xl w-full bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
         <h1 className="text-3xl font-bold text-center mb-2 text-indigo-400">
           مُنزّل الفيديوهات الشامل 🚀
         </h1>
         <p className="text-center text-slate-400 mb-6 text-sm">
-          يدعم التحميل من X (تويتر)، YouTube، Instagram، و LinkedIn
+          يدعم التحميل من X (تويتر)، YouTube، Instagram، و LinkedIn بدقة عالية وصوت MP3
         </p>
 
-        {/* نموذج إدخال الرابط */}
         <form onSubmit={handleFetchInfo} className="flex gap-2 mb-6">
           <input
             type="url"
-            placeholder="ضع رابط الفيديو هنا (YouTube, X, Instagram...)"
+            placeholder="ضع رابط الفيديو هنا..."
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             required
@@ -77,14 +75,12 @@ export default function Home() {
           </button>
         </form>
 
-        {/* عرض الخطأ إن وجد */}
         {error && (
           <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-xl text-center mb-6">
             {error}
           </div>
         )}
 
-        {/* تفاصيل الفيديو والخيارات */}
         {videoInfo && (
           <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600 space-y-4">
             <div className="flex flex-col sm:flex-row gap-4 items-center">
@@ -105,10 +101,9 @@ export default function Home() {
 
             <hr className="border-slate-600" />
 
-            {/* خيارات الجودة والتنزيل */}
             <div>
-              <h4 className="font-semibold mb-3 text-indigo-300">اختر الجودة للتحميل:</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+              <h4 className="font-semibold mb-3 text-indigo-300">اختر الجودة أو التنسيق للتحميل:</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto">
                 {videoInfo.formats.map((fmt, index) => (
                   <a
                     key={index}
@@ -118,8 +113,8 @@ export default function Home() {
                     download
                     className="flex justify-between items-center bg-slate-800 hover:bg-indigo-600/30 border border-slate-600 p-3 rounded-lg text-sm transition"
                   >
-                    <span>🎬 {fmt.quality}</span>
-                    <span className="bg-indigo-500 text-xs px-2 py-1 rounded">تنزيل</span>
+                    <span>{fmt.quality}</span>
+                    <span className="bg-indigo-500 text-xs px-3 py-1 rounded-md font-bold">تحميل</span>
                   </a>
                 ))}
               </div>

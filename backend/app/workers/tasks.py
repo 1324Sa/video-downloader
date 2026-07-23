@@ -8,6 +8,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DOWNLOADS_DIR = BASE_DIR / "temp_downloads"
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+# مسار ملف الكوكيز إن وجد
+COOKIES_PATH = BASE_DIR / "cookies.txt"
+
 # 2. قراءة إعدادات Redis من متغيرات البيئة
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 RESULT_BACKEND = os.getenv("RESULT_BACKEND", "redis://localhost:6379/1")
@@ -32,7 +35,7 @@ celery_app.conf.update(
 @celery_app.task(bind=True)
 def download_video_task(self, url: str, options: dict = None, **kwargs):
     """
-    تنفذ عملية تحميل الفيديو أو الصوت باستخدام yt-dlp وتسجل التقدم لحظياً.
+    تنفذ عملية تحميل الفيديو أو الصوت باستخدام yt-dlp وتسجل التقدم لحظياً بكل مرونة.
     """
     options = options or {}
 
@@ -64,35 +67,39 @@ def download_video_task(self, url: str, options: dict = None, **kwargs):
                 },
             )
 
+    # إعداد خيارات yt-dlp الأساسية
+    ydl_opts = {
+        "outtmpl": str(output_file_path),
+        "overwrites": True,
+        "quiet": True,
+        "no_warnings": True,
+        "progress_hooks": [progress_hook],
+    }
+
+    # ربط ملف الكوكيز إذا كان موجوداً على السيرفر لتجنب حظر يوتيوب
+    if COOKIES_PATH.exists():
+        ydl_opts["cookiefile"] = str(COOKIES_PATH.absolute())
+
     # إعداد خيارات yt-dlp بناءً على النوع المطلوب (فيديو أو صوت)
     if download_type == "audio":
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "outtmpl": str(DOWNLOADS_DIR / "audio_output.%(ext)s"),
-            "overwrites": True,
-            "progress_hooks": [progress_hook],
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": quality,
-                }
-            ],
-        }
+        ydl_opts["format"] = "bestaudio/best"
+        ydl_opts["postprocessors"] = [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": quality,
+            }
+        ]
         output_filename = "audio_output.mp3"
     else:
-        # اختيار صيغة الفيديو
-        video_format = (
-            f"{format_id}+bestaudio/best"
-            if format_id != "best"
-            else "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
-        )
-        ydl_opts = {
-            "format": video_format,
-            "outtmpl": str(output_file_path),
-            "overwrites": True,
-            "progress_hooks": [progress_hook],
-        }
+        # استخدام صيغة مرنة جداً تتجنب خطأ الصيغة غير المتاحة (Requested format is not available)
+        if format_id and format_id != "best":
+            ydl_opts["format"] = f"{format_id}+bestaudio/best/best"
+        else:
+            ydl_opts["format"] = "best"
+        
+        # محاولة دمج المخرجات إلى mp4 إن أمكن
+        ydl_opts["merge_output_format"] = "mp4"
 
     # تحديث أولّي قبل بدء yt-dlp
     self.update_state(
@@ -105,10 +112,21 @@ def download_video_task(self, url: str, options: dict = None, **kwargs):
     )
 
     # 5. تنزيل الوسائط فعلياً
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            # تحديث اسم الملف الناتج بدقة بناءً على الامتداد الحقيقي للملف المحمل
+            filename = ydl.prepare_filename(info)
+            output_filename = os.path.basename(filename)
+            if download_type == "video" and not output_filename.endswith('.mp4'):
+                base = os.path.splitext(output_filename)[0]
+                if os.path.exists(os.path.join(DOWNLOADS_DIR, base + '.mp4')):
+                    output_filename = base + '.mp4'
+    except Exception as e:
+        print(f"Task Download Error: {str(e)}")
+        raise Exception(f"فشل التحميل: {str(e)}")
 
-    # 6. النتيجة النهائية عند الاكتشمال
+    # 6. النتيجة النهائية عند الاكتمال
     return {
         "status": "completed",
         "progress": 100,

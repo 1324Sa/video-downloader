@@ -140,7 +140,8 @@ def download_media(
             elif format_id and format_id != "best":
                 ydl_opts['format'] = f"{format_id}+bestaudio/best"
             else:
-                ydl_opts['format'] = 'bestvideo+bestaudio/best'
+                # صيغة ذكية وآمنة تدعم الفيديوهات والشورٹس وتتجنب خطأ الصيغة غير المتاحة
+                ydl_opts['format'] = 'bv*+ba/b'
 
             ydl_opts['merge_output_format'] = 'mp4'
         else:
@@ -148,7 +149,7 @@ def download_media(
                 target_height = height_match.group()
                 ydl_opts['format'] = f"b[height<={target_height}]/best[ext=mp4]/best"
             else:
-                ydl_opts['format'] = 'b/best[ext=mp4]/best'
+                ydl_opts['format'] = 'b/best'
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

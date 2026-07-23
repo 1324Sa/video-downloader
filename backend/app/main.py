@@ -2,14 +2,12 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.services.downloader import extract_video_info
-from app.workers.tasks import celery_app, download_video_task
+from app.services.downloader import download_media, extract_video_info
 
 # --- المسارات والثوابت ---
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -64,57 +62,24 @@ async def fetch_info(payload: VideoRequest) -> Dict[str, Any]:
     return result
 
 
-@app.post("/api/download", summary="Enqueue Media Download Task")
-async def start_download(payload: DownloadRequest) -> Dict[str, str]:
-    """إضافة طلب التحميل إلى طابور Celery وإرجاع رقم المهمة (Task ID)."""
-    options = {
-        "download_type": payload.download_type,
-        "format_id": payload.format_id,
-        "quality": payload.quality,
-        "enhance_mode": payload.enhance_mode,
-    }
-    task = download_video_task.delay(url=payload.url, options=options)
-
-    return {
-        "message": "تمت إضافة المهمة للانتظار بنجاح",
-        "task_id": str(task.id),
-    }
-
-
-@app.get("/api/status/{task_id}", summary="Check Task Status & Progress")
-async def get_task_status(task_id: str) -> Dict[str, Any]:
-    """التحقق من حالة تنفيذ المهمة في Celery ونسبة التقدم الحالية."""
-    task_result = AsyncResult(task_id, app=celery_app)
-    state = task_result.state
-
-    if state == "PENDING":
-        return {"status": "pending", "progress": 0}
-
-    elif state == "PROGRESS":
-        info = task_result.info or {}
-        return {
-            "status": "processing",
-            "progress": info.get("progress", 0),
-            "speed": info.get("speed", 0),
-            "eta": info.get("eta", 0),
-            "message": info.get("message") or info.get("status", "جاري المعالجة..."),
-        }
-
-    elif state == "SUCCESS":
-        return {
-            "status": "completed",
-            "progress": 100,
-            "result": task_result.result,
-        }
-
-    elif state == "FAILURE":
-        return {
-            "status": "failed",
-            "progress": 0,
-            "error": str(task_result.info),
-        }
-
-    return {"status": state.lower(), "progress": 0}
+@app.post("/api/download", summary="Direct Media Download")
+def start_download(payload: DownloadRequest) -> Dict[str, Any]:
+    """تنفيذ التحميل مباشرة وتجنب الاعتماد على Celery و Redis."""
+    try:
+        result = download_media(
+            url=payload.url,
+            download_type=payload.download_type,
+            format_id=payload.format_id,
+            quality=payload.quality,
+            enhance_mode=payload.enhance_mode,
+            use_ffmpeg=True,
+        )
+        return {"success": True, "data": result}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
 
 
 @app.get("/api/files/{filename}", summary="Download File")

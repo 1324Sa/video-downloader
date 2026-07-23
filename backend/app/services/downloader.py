@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, Optional
 import yt_dlp
 
 # --- تحديد المسارات وثوابت التنزيل ---
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+BASE_DIR = Path(__file__).resolve().parent
 COOKIES_PATH = BASE_DIR / "cookies.txt"
 
 TEMP_DOWNLOAD_DIR = "temp_downloads"

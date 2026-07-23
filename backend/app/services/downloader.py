@@ -8,7 +8,7 @@ import yt_dlp
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 COOKIES_PATH = BASE_DIR / "cookies.txt"
 
-# إذا كان متغير البيئة موجوداً في Render، قم بإنشاء ملف cookies.txt تلقائياً من محتواه
+# إنشاء ملف cookies.txt تلقائياً إن وجد في متغيرات البيئة
 youtube_cookies_env = os.getenv("YOUTUBE_COOKIES")
 if youtube_cookies_env:
     try:
@@ -25,15 +25,16 @@ os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
 def extract_video_info(url: str) -> Dict[str, Any]:
     """استخراج تفاصيل الفيديو أو الشورتس مع تجاوز القيود وصيغ يوتيوب."""
     
-    print(f"=== CHECK COOKIES ===")
-    print(f"Path: {COOKIES_PATH.absolute()}")
-    print(f"Exists: {COOKIES_PATH.exists()}")
-
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
-        'format': 'best/all',  # السماح بقراءة كافة الصيغ المتاحة للشورٹس والفيديوهات
+        'format': 'bestvideo+bestaudio/best',  # قراءة أفضل الصيغ المتاحة للشورٹس والفيديوهات
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web']  # لتجاوز حظر يوتيوب وجلب معلومات الشورتس
+            }
+        }
     }
 
     if COOKIES_PATH.exists():
@@ -52,7 +53,7 @@ def extract_video_info(url: str) -> Dict[str, Any]:
                 if height and height not in seen_heights:
                     seen_heights.add(height)
                     video_formats.append({
-                        "format_id": f.get('format_id'),
+                        "format_id": str(height),  # استخدام الارتفاع كمعرف للدقة
                         "resolution": f"{height}p",
                         "height": height,
                         "ext": f.get('ext', 'mp4'),
@@ -93,7 +94,7 @@ def download_media(
     use_ffmpeg: bool = True,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
-    """تنزيل الميديا بالدقة المطلوبة مع دعم متابعة نسبة التنزيل وتمرير الكوكيز."""
+    """تنزيل الميديا بالدقة المطلوبة مع دعم Shorts وتفادي الأخطاء."""
     outtmpl = os.path.join(TEMP_DOWNLOAD_DIR, '%(id)s.%(ext)s')
 
     def progress_hook(d: Dict[str, Any]) -> None:
@@ -109,32 +110,40 @@ def download_media(
                 'status': 'downloading',
             })
 
+    # بناء خيار الصيغة بمرونة عالية للشورٹس والفيديوهات العادية
+    if download_type == "audio":
+        format_option = 'bestaudio/best'
+    else:
+        if format_id and format_id not in ['best', 'undefined', 'null']:
+            format_option = f'bestvideo[height<={format_id}]+bestaudio/best[height<={format_id}]/best'
+        else:
+            format_option = 'bestvideo+bestaudio/best'
+
     ydl_opts: Dict[str, Any] = {
         'outtmpl': outtmpl,
+        'format': format_option,
         'quiet': True,
         'no_warnings': True,
         'overwrites': True,
         'progress_hooks': [progress_hook],
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web']
+            }
+        }
     }
 
     if COOKIES_PATH.exists():
         ydl_opts['cookiefile'] = str(COOKIES_PATH.absolute())
 
-    if download_type == "audio":
-        ydl_opts['format'] = 'bestaudio/best'
-        if use_ffmpeg:
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': quality if quality in ["320", "192", "128"] else "192",
-            }]
-    else:
-        # استخدام الصيغة المرنة الآمنة للجميع لتجنب خطأ صيغ الشورتس والفيديوهات غير المتاحة
-        if use_ffmpeg:
-            ydl_opts['format'] = 'bv*+ba/b'
-            ydl_opts['merge_output_format'] = 'mp4'
-        else:
-            ydl_opts['format'] = 'b/best'
+    if download_type == "audio" and use_ffmpeg:
+        ydl_opts['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': quality if quality in ["320", "192", "128"] else "192",
+        }]
+    elif download_type == "video" and use_ffmpeg:
+        ydl_opts['merge_output_format'] = 'mp4'
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
